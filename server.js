@@ -42,7 +42,23 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 app.use(cookieParser());
 
-app.use(cors({ origin: "http://localhost:3000", credentials: true, exposedHeaders: ["x-access-token"], }));
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:3000",
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, server-to-server)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: origin '${origin}' not allowed`));
+    }
+  },
+  credentials: true,
+  exposedHeaders: ["x-access-token"],
+}));
 
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true })); 
@@ -55,9 +71,15 @@ app.use(helmet({
 
 app.use(morgan("dev"));
 
-const serviceAccount = JSON.parse(
-  fs.readFileSync("./config/serviceAccountKey.json", "utf-8")
-);
+// Read Firebase credentials from env var (Render/Vercel) or fall back to local file (dev)
+let serviceAccount;
+if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+} else {
+  serviceAccount = JSON.parse(
+    fs.readFileSync("./config/serviceAccountKey.json", "utf-8")
+  );
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
